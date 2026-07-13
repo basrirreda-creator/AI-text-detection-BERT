@@ -1,0 +1,91 @@
+### **3. src/preprocessing.py**
+```python
+"""
+Prétraitement des données textuelles
+"""
+
+import pandas as pd
+import numpy as np
+import re
+import logging
+from typing import List, Tuple
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class TextPreprocessor:
+    """Préprocesseur de textes"""
+    
+    @staticmethod
+    def clean_text(text: str) -> str:
+        """Nettoyer un texte"""
+        # Minuscules
+        text = text.lower()
+        
+        # Supprimer les URLs
+        text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+        
+        # Supprimer les caractères spéciaux
+        text = re.sub(r'[^a-zA-Z\s\.\!\?\,\;]', '', text)
+        
+        # Supprimer les espaces multiples
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
+    @staticmethod
+    def truncate_text(text: str, max_length: int = 512) -> str:
+        """Tronquer un texte"""
+        words = text.split()
+        
+        if len(words) > max_length:
+            words = words[:max_length]
+        
+        return ' '.join(words)
+    
+    @staticmethod
+    def extract_features(text: str) -> dict:
+        """Extraire des features du texte"""
+        features = {
+            'length': len(text),
+            'word_count': len(text.split()),
+            'avg_word_length': np.mean([len(w) for w in text.split()]),
+            'sentence_count': len(re.split(r'[.!?]', text)),
+            'special_char_ratio': len(re.findall(r'[^a-zA-Z0-9\s]', text)) / len(text),
+            'uppercase_ratio': sum(1 for c in text if c.isupper()) / len(text)
+        }
+        return features
+    
+    @staticmethod
+    def prepare_dataset(df: pd.DataFrame, test_size: float = 0.2) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Préparer le dataset"""
+        logger.info(f"📊 Préparation du dataset ({len(df)} textes)...")
+        
+        # Nettoyer les textes
+        df['text'] = df['text'].apply(TextPreprocessor.clean_text)
+        df['text'] = df['text'].apply(TextPreprocessor.truncate_text)
+        
+        # Supprimer les textes vides
+        df = df[df['text'].str.len() > 10]
+        
+        # Balancer les classes
+        logger.info("⚖️ Balancement des classes...")
+        min_class_count = df['label'].value_counts().min()
+        df_balanced = df.groupby('label').apply(
+            lambda x: x.sample(n=min_class_count, random_state=42)
+        ).reset_index(drop=True)
+        
+        logger.info(f"✅ Dataset préparé: {len(df_balanced)} textes")
+        
+        return df_balanced
+
+
+# Utilisation
+if __name__ == "__main__":
+    df = pd.read_csv("data/raw/training_data.csv")
+    
+    preprocessor = TextPreprocessor()
+    df_clean = preprocessor.prepare_dataset(df)
+    
+    logger.info(f"\n✅ Données prétraitées")
+    df_clean.to_csv("data/processed/processed_data.csv", index=False)
