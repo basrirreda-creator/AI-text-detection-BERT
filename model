@@ -1,0 +1,78 @@
+"""
+Modèle BERT pour détection de textes générés par IA
+"""
+
+import torch
+from torch import nn
+from transformers import BertModel, BertTokenizer
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class BertTextDetector(nn.Module):
+    """Modèle BERT pour classification"""
+    
+    def __init__(self, num_classes: int = 5, model_name: str = "bert-base-uncased"):
+        super(BertTextDetector, self).__init__()
+        
+        self.bert = BertModel.from_pretrained(model_name)
+        self.dropout = nn.Dropout(0.1)
+        
+        # Couches de classification
+        self.fc1 = nn.Linear(768, 256)
+        self.relu = nn.ReLU()
+        self.dropout2 = nn.Dropout(0.3)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, num_classes)
+        
+        logger.info(f"🧠 Modèle BERT créé ({model_name})")
+    
+    def forward(self, input_ids, attention_mask, token_type_ids=None):
+        """Forward pass"""
+        # BERT encoding
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids
+        )
+        
+        # [CLS] token
+        pooled_output = outputs.pooler_output
+        
+        # Classification layers
+        x = self.dropout(pooled_output)
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        
+        return x
+    
+    def freeze_bert_layers(self, num_layers: int = 10):
+        """Geler les couches BERT"""
+        encoder_layers = self.bert.encoder.layer
+        
+        for i in range(num_layers):
+            for param in encoder_layers[i].parameters():
+                param.requires_grad = False
+        
+        logger.info(f"❄️ {num_layers} couches BERT gelées")
+
+
+def create_tokenizer(model_name: str = "bert-base-uncased"):
+    """Créer le tokenizer"""
+    tokenizer = BertTokenizer.from_pretrained(model_name)
+    return tokenizer
+
+
+# Utilisation
+if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    model = BertTextDetector(num_classes=5)
+    model = model.to(device)
+    
+    logger.info(f"✅ Modèle créé sur {device}")
